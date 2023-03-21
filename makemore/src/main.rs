@@ -61,8 +61,8 @@ fn main() -> anyhow::Result<()> {
     let c: DMatrix<f64> = DMatrix::from_fn(vocab_size, n_embd, |i_, j_| StandardNormal.sample(&mut rng));
     let mut params: Vec<f64> = (0..(n_embd*block_size+vocab_size)).map(|x_| StandardNormal.sample(&mut rng)).collect();
 
-    let learning_rate: f64 = 1e-4; 
-    let epoch = 10; 
+    let learning_rate: f64 = 1.0; 
+    let epoch = 100; 
 
     for i_ in 0..epoch {
         let mut rng = StdRng::seed_from_u64(42);

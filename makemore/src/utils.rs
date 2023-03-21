@@ -29,7 +29,7 @@ pub fn calc_loss_auto<T>(iy: usize, emb: &[T], params: &[T]) -> T
     let h = dot_prod.tanh();
     let logits = DMatrix::from_iterator(1, 27, w2.iter().map(|&x| x*h));
     let probs = softmax(&logits);  
-    let loss = -probs[(0, iy)];
+    let loss = -probs[(0, iy)].ln();
     println!("loss {loss:?}");
     loss.into()
 }
