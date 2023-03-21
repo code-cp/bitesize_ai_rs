@@ -11,3 +11,4 @@ nalgebra = "0.32.2"
 rand = "0.8.5"
 rand_distr = "0.4.3"
 num = "0.4.0"
+autodiff = { version = "0.5.1", features = ["na"] }
