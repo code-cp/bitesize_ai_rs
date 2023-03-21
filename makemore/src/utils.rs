@@ -1,4 +1,4 @@
-use nalgebra::{DMatrix, SMatrix, Scalar, DVector, SVector, Dyn};
+use nalgebra::{DMatrix, SMatrix, Scalar, DVector, SVector, Dyn, ClosedMul, ClosedAdd};
 use num::Float;
 use std::fmt::Debug;
 use std::ops::{AddAssign, DivAssign};
@@ -18,20 +18,23 @@ where
     exp_matrix
 }
 
-pub fn calc_loss_auto<T>(ix: usize, y_tr: &DVector<f64>, emb: &DMatrix<f64>, params: &[T]) -> T 
-    where T: 'static+Float+Debug+From<f64>, 
+pub fn calc_loss_auto<T>(iy: usize, emb: &[T], params: &[T]) -> T 
+    where T: 'static+Float+Debug+From<f64>+ClosedAdd+ClosedMul+DivAssign, 
 {
-    let params: Vec<f64> = params.iter().map(|&x| <f64 as num::NumCast>::from(x).unwrap()).collect();
-    let params = params.as_slice(); 
-    let w1 = DMatrix::from_column_slice(30, 1, &params[0..30]); 
+    let emb = DMatrix::from_column_slice(1, 30, &emb); 
+    let w1 = DMatrix::from_column_slice(1, 30, &params[0..30]); 
     let w2 = DMatrix::from_column_slice(1, 27, &params[30..]);
-    let h = (emb * &w1).map(|x: f64| x.tanh());
-    let logits = &h * &w2;
+
+    let dot_prod = emb.dot(&w1); 
+    let h = dot_prod.tanh();
+    let logits = DMatrix::from_iterator(1, 27, w2.iter().map(|&x| x*h));
     let probs = softmax(&logits);  
-    let loss = -probs[(0, y_tr.select_rows(&[ix]).as_slice()[0] as usize)];
+    let loss = -probs[(0, iy)];
+    println!("loss {loss:?}");
     loss.into()
 }
 
-pub fn calc_grad_auto(ix: usize, y_tr: &DVector<f64>, emb: &DMatrix<f64>, params: &[f64]) -> Vec<f64> {
-    grad(|x| calc_loss_auto(ix, y_tr, emb, x), params)
+pub fn calc_grad_auto(iy: usize, emb: &[f64], params: &[f64]) -> Vec<f64> {
+    let emb_dual: Vec<F<f64, f64>> = emb.iter().map(|&x| F1::var(x)).collect();
+    grad(|x| calc_loss_auto(iy, emb_dual.as_slice(), x), params)
 }

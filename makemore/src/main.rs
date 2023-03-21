@@ -9,7 +9,7 @@ use rand::rngs::StdRng;
 use rand_distr::StandardNormal;
 use rand_distr::Distribution;
 
-use nalgebra::{DMatrix, Dyn};
+use nalgebra::{DMatrix, SMatrix, SVector, Const};
 
 use makemore::data::build_dataset;
 use makemore::utils::{calc_loss_auto, calc_grad_auto};
@@ -59,29 +59,23 @@ fn main() -> anyhow::Result<()> {
     let n_hidden = 1;
 
     let c: DMatrix<f64> = DMatrix::from_fn(vocab_size, n_embd, |i_, j_| StandardNormal.sample(&mut rng));
-
     let mut params: Vec<f64> = (0..(n_embd*block_size+vocab_size)).map(|x_| StandardNormal.sample(&mut rng)).collect();
 
-    let learning_rate: f64 = 1e-3; 
+    let learning_rate: f64 = 1e-4; 
     let epoch = 10; 
 
     for i_ in 0..epoch {
         let mut rng = StdRng::seed_from_u64(42);
         // forward pass
         let ix = rng.gen_range(0..x_tr.nrows() as usize);
+        let iy = y_tr.select_rows(&[ix]).as_slice()[0] as usize; 
 
         let emb: DMatrix<f64> = c.select_rows(x_tr.select_rows(&[ix]).as_slice().iter().map(|&x| x as usize).collect::<Vec<usize>>().as_slice());
-        // println!("emb size {:?}", emb.shape()); 
-        // Reshape the matrix to have -1 in the first dimension and 30 in the second dimension
-        let emb = emb.reshape_generic(Dyn(1), Dyn(30));
-        // println!("emb size after reshape {:?}", emb.shape());
-    
-        let loss = calc_loss_auto(ix, &y_tr, &emb, params.as_slice());
-        println!("loss {loss:?}");
+        let emb: Vec<f64> = emb.iter().map(|&x| x).collect();
 
         // back prop 
-        let grad = calc_grad_auto(ix, &y_tr, &emb, params.as_slice());
-        println!("grad {grad:?}"); 
+        let grad = calc_grad_auto(iy, emb.as_slice(), params.as_slice());
+        // println!("grad {grad:?}"); 
         params = params.iter().zip(grad.iter()).map(|(&p, &g)| p - g*learning_rate).collect::<Vec<f64>>();
     }
 
