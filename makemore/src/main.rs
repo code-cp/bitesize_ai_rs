@@ -10,10 +10,10 @@ use rand_distr::StandardNormal;
 use rand::distributions::{Distribution, Uniform};
 use rand::{prelude::*, distributions::WeightedIndex};
 
-use nalgebra::{DMatrix, SMatrix, SVector, Const};
+use nalgebra::{DMatrix, SMatrix, SVector, Const, U1, Dyn};
 
 use makemore::data::build_dataset;
-use makemore::utils::{softmax, calc_grad_auto};
+use makemore::utils::{softmax, calc_grad_auto, calc_loss_auto};
 
 // implements https://github.com/karpathy/nn-zero-to-hero/blob/master/lectures/makemore/makemore_part2_mlp.ipynb
 
@@ -54,50 +54,59 @@ fn main() -> anyhow::Result<()> {
     // let (x_dev, y_dev) = build_dataset(words[n1..n2].to_vec(), block_size, &stoi)?;
     // let (x_te, y_te) = build_dataset(words[n2..].to_vec(), block_size, &stoi)?;
 
+    let batch_size = 32; 
     // the dimensionality of the character embedding vectors
     let n_embd = 10;
     // the number of neurons in the hidden layer of the MLP
-    // let n_hidden = 1;
+    let n_hidden = 200;
 
     // params contain c, w1, w2 
-    let mut params: Vec<f64> = (0..(vocab_size*n_embd+n_embd*block_size+vocab_size)).map(|_| StandardNormal.sample(&mut rng)).collect();
+    let mut params: Vec<f64> = (0..(vocab_size*n_embd+n_embd*block_size*n_hidden+vocab_size*n_hidden)).map(|_| StandardNormal.sample(&mut rng)).collect();
 
-    let learning_rate: f64 = 1.0; 
-    let epoch = 100; 
+    let learning_rate: f64 = 0.1; 
+    let epoch = 10; 
 
-    for _ in 0..epoch {
-        let mut rng = StdRng::seed_from_u64(42);
+    for i in 0..epoch {
+        println!("epoch {i:?}");
         // forward pass
-        let ix = rng.gen_range(0..x_tr.nrows() as usize);
-        let ixs = x_tr.select_rows(&[ix]).as_slice().iter().map(|&x| x as usize).collect::<Vec<usize>>();
-        let iy = y_tr.select_rows(&[ix]).as_slice()[0] as usize; 
+        let mut ix = Vec::new(); 
+        for _ in 0..batch_size {
+            let mut rng = StdRng::from_entropy();
+            let x = rng.gen_range(0..x_tr.nrows() as usize);
+            ix.push(x); 
+        }
+        let ixs = x_tr.select_rows(ix.as_slice()).as_slice().iter().map(|&x| x as usize).collect::<Vec<usize>>();
+        let iy = y_tr.select_rows(ix.as_slice()).as_slice().iter().map(|&x| x as usize).collect::<Vec<usize>>(); 
+        let loss = calc_loss_auto(vocab_size, n_embd, n_hidden, &iy, &ixs, &params); 
+        println!("loss {loss:?}"); 
 
         // back prop 
-        let grad = calc_grad_auto(vocab_size, n_embd, iy, &ixs, params.as_slice());
+        let grad = calc_grad_auto(vocab_size, n_embd, n_hidden, &iy, &ixs, params.as_slice());
         // println!("grad {grad:?}"); 
         params = params.iter().zip(grad.iter()).map(|(&p, &g)| p - g*learning_rate).collect::<Vec<f64>>();
     }
 
     // sample 
     let c = DMatrix::from_column_slice(vocab_size, n_embd, &params[0..vocab_size*n_embd]); 
-    let w1 = DMatrix::from_column_slice(1, 30, &params[vocab_size*n_embd..vocab_size*n_embd+30]); 
-    let w2 = DMatrix::from_column_slice(1, 27, &params[vocab_size*n_embd+30..]);
+    let w1 = DMatrix::from_column_slice(30, n_hidden, &params[vocab_size*n_embd..vocab_size*n_embd+30*n_hidden]); 
+    let w2 = DMatrix::from_column_slice(n_hidden, 27, &params[vocab_size*n_embd+30*n_hidden..]);
+
     let values: Vec<usize> = (0..vocab_size).collect(); 
 
     for _ in 0..5 {
         let mut name = Vec::new(); 
+        let mut context = vec![0; block_size];
         loop {
-            let mut context = vec![0; block_size];
-            let emb = c.select_rows(context.as_slice());
-            let emb: Vec<f64> = emb.iter().map(|&x| x).collect();
-    
-            let dot_prod = emb.iter().zip(w1.iter()).map(|(&x, &y)| x * y).fold(0.0, |acc, x| acc + x); 
-            let h = dot_prod.tanh();
-    
-            let logits = DMatrix::from_iterator(1, 27, w2.iter().map(|&x| x*h));
-            let probs = softmax(&logits); 
+            let emb: DMatrix<f64> = c.select_rows(context.as_slice());
+            let emb = emb.reshape_generic(Dyn(1), Dyn(30));
+            // println!("emb shape {:?}", emb.shape()); 
+            let layer1 = emb * w1.clone(); 
+            let h = layer1.map(|x| x.tanh());
+            let logits = h * w2.clone(); 
+            let probs = softmax(&logits);  
 
             let dist = WeightedIndex::new(&probs).unwrap();
+            let mut rng = StdRng::from_entropy();
             let ix = values[dist.sample(&mut rng)];
     
             context = context[1..].to_vec();
