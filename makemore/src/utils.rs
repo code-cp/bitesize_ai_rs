@@ -18,14 +18,17 @@ where
     exp_matrix
 }
 
-pub fn calc_loss_auto<T>(iy: usize, emb: &[T], params: &[T]) -> T 
-    where T: 'static+Float+Debug+From<f64>+ClosedAdd+ClosedMul+DivAssign, 
+pub fn calc_loss_auto<T>(vocab_size: usize, n_embd: usize, iy: usize, ixs: &[usize], params: &[T]) -> T 
+    where T: 'static+Default+Float+Debug+From<f64>+ClosedAdd+ClosedMul+DivAssign, 
 {
-    let emb = DMatrix::from_column_slice(1, 30, &emb); 
-    let w1 = DMatrix::from_column_slice(1, 30, &params[0..30]); 
-    let w2 = DMatrix::from_column_slice(1, 27, &params[30..]);
+    let c = DMatrix::from_column_slice(vocab_size, n_embd, &params[0..vocab_size*n_embd]); 
+    let w1 = DMatrix::from_column_slice(1, 30, &params[vocab_size*n_embd..vocab_size*n_embd+30]); 
+    let w2 = DMatrix::from_column_slice(1, 27, &params[vocab_size*n_embd+30..]);
 
-    let dot_prod = emb.dot(&w1); 
+    let emb: DMatrix<T> = c.select_rows(ixs);
+    let emb: Vec<T> = emb.iter().map(|&x| x).collect();
+
+    let dot_prod = emb.iter().zip(w1.iter()).map(|(&x, &y)| x * y).fold(T::default(), |acc, x| acc + x); 
     let h = dot_prod.tanh();
     let logits = DMatrix::from_iterator(1, 27, w2.iter().map(|&x| x*h));
     let probs = softmax(&logits);  
@@ -34,7 +37,6 @@ pub fn calc_loss_auto<T>(iy: usize, emb: &[T], params: &[T]) -> T
     loss.into()
 }
 
-pub fn calc_grad_auto(iy: usize, emb: &[f64], params: &[f64]) -> Vec<f64> {
-    let emb_dual: Vec<F<f64, f64>> = emb.iter().map(|&x| F1::var(x)).collect();
-    grad(|x| calc_loss_auto(iy, emb_dual.as_slice(), x), params)
+pub fn calc_grad_auto(vocab_size: usize, n_embd: usize, iy: usize, ixs: &[usize], params: &[f64]) -> Vec<f64> {
+    grad(|x| calc_loss_auto(vocab_size, n_embd, iy, ixs, x), params)
 }
