@@ -64,7 +64,7 @@ fn main() -> anyhow::Result<()> {
     let mut params: Vec<f64> = (0..(vocab_size*n_embd+n_embd*block_size*n_hidden+vocab_size*n_hidden)).map(|_| StandardNormal.sample(&mut rng)).collect();
 
     let learning_rate: f64 = 0.1; 
-    let epoch = 10; 
+    let epoch = 2000; 
 
     for i in 0..epoch {
         println!("epoch {i:?}");
@@ -123,3 +123,24 @@ fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+// output after 100 epochs 
+// name: kim.
+// name: lie.
+// name: cianaur.
+// name: lee.
+// name: lie.
+
+// output after 1000 epochs 
+// name: rioh.
+// name: muxmiamo.
+// name: mire.
+// name: mrrms.
+// name: gmrz.
+
+// output after 2000 epochs 
+// name: taf.
+// name: ban.
+// name: srhi.
+// name: janri.
+// name: ury.

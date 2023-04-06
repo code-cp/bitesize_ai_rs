@@ -61,7 +61,7 @@ stepi = []
 
 batch = 32
 
-for i in range(200000):
+for i in range(100):
   
   # minibatch construct
   ix = torch.randint(0, Xtr.shape[0], (batch,))

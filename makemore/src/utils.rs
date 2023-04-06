@@ -9,8 +9,7 @@ pub fn softmax<T>(matrix: &DMatrix<T>) -> DMatrix<T>
 where
     T: Float + Debug + AddAssign + DivAssign + Scalar,
 {
-    let max_val = matrix.fold(T::zero(), |max, x| T::max(max, x));
-    let mut exp_matrix = matrix.map(|x| (x - max_val).exp());
+    let mut exp_matrix = matrix.map(|x| x.exp());
     for i in 0..exp_matrix.nrows() {
         let row_sum = exp_matrix.row(i).sum();
         exp_matrix.set_row(i, &(exp_matrix.row(i) / row_sum));
@@ -26,9 +25,10 @@ pub fn calc_loss_auto<T>(vocab_size: usize, n_embd: usize, n_hidden: usize, iy: 
     let w2 = DMatrix::from_column_slice(n_hidden, 27, &params[vocab_size*n_embd+30*n_hidden..]);
 
     let emb: DMatrix<T> = c.select_rows(ixs);
+    // println!("emb shape {:?}", emb.shape()); 
     let row_num = emb.nrows() * emb.ncols() / 30; 
     let emb = emb.reshape_generic(Dyn(row_num), Dyn(30));
-    // println!("emb shape {:?}", emb.shape()); 
+
     let layer1 = emb * w1; 
     let h = layer1.map(|x| x.tanh());
     let logits = h * w2; 
@@ -36,11 +36,11 @@ pub fn calc_loss_auto<T>(vocab_size: usize, n_embd: usize, n_hidden: usize, iy: 
     let mut loss = T::zero(); 
     {
         for (i, y) in iy.iter().enumerate() {
-            loss += -probs[(i, *y)].ln()
+            loss += -probs[(i, *y)].ln(); 
         }
     }
     // println!("loss {loss:?}");
-    loss.into()
+    (loss/<T as From<f64>>::from(probs.nrows() as f64)).into()
 }
 
 pub fn calc_grad_auto(vocab_size: usize, n_embd: usize, n_hidden: usize, iy: &[usize], ixs: &[usize], params: &[f64]) -> Vec<f64> {
