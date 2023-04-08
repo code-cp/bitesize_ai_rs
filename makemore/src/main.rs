@@ -80,7 +80,8 @@ fn main() -> anyhow::Result<()> {
         let loss = calc_loss_auto(vocab_size, n_embd, n_hidden, &iy, &ixs, &params); 
         println!("loss {loss:?}"); 
 
-        // back prop 
+        // back prop
+        // Automatic differentiation using dual numbers 
         let grad = calc_grad_auto(vocab_size, n_embd, n_hidden, &iy, &ixs, params.as_slice());
         // println!("grad {grad:?}"); 
         params = params.iter().zip(grad.iter()).map(|(&p, &g)| p - g*learning_rate).collect::<Vec<f64>>();
@@ -91,6 +92,7 @@ fn main() -> anyhow::Result<()> {
     let w1 = DMatrix::from_column_slice(30, n_hidden, &params[vocab_size*n_embd..vocab_size*n_embd+30*n_hidden]); 
     let w2 = DMatrix::from_column_slice(n_hidden, 27, &params[vocab_size*n_embd+30*n_hidden..]);
 
+    // the indices for the characters, used for sampling 
     let values: Vec<usize> = (0..vocab_size).collect(); 
 
     for _ in 0..5 {

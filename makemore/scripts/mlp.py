@@ -21,7 +21,6 @@ block_size = 3 # context length: how many characters do we take to predict the n
 def build_dataset(words):  
   X, Y = [], []
   for w in words:
-
     #print(w)
     context = [0] * block_size
     for ch in w + '.':
