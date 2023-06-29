@@ -9,6 +9,8 @@ pub struct MNISTBatcher<B: Backend>{
 
 #[derive(Clone, Debug)]
 pub struct MNISTBatch<B: Backend> {
+    // ref https://github.com/burn-rs/burn/blob/f99fe0faddfa9152f0049532b94ce33177dd55f9/examples/mnist/src/data.rs#L12C30-L12C30
+    // images are NOT arranged as b, c, w, h 
     pub images: Tensor<B, 3>, 
     pub targets: Tensor<B, 1, Int>, 
 }

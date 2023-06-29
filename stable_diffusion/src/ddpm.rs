@@ -1,6 +1,6 @@
 use burn::{
     config::Config,
-    tensor::{backend::{Backend}, Data, ElementConversion, Int, Tensor},
+    tensor::{backend::Backend, Shape, Data, ElementConversion, Int, Tensor, Distribution},
     data::{dataloader::DataLoaderBuilder, dataset::source::huggingface::MNISTDataset}, 
 };
 use burn_ndarray::{NdArrayBackend, NdArrayDevice}; 
@@ -11,6 +11,10 @@ use ndarray_rand::rand_distr::StandardNormal;
 use image::{ImageBuffer};
 
 use crate::data::MNISTBatcher;
+use crate::model::UNet; 
+
+type B = NdArrayBackend<f32>;
+type D = NdArrayDevice;
 
 pub struct DDPM {
     pub betas: Array1<f32>, 
@@ -66,16 +70,43 @@ impl DDPM {
         let res = eps * (1.0-alpha_bar).sqrt() + alpha_bar.sqrt() * x; 
         res         
     }
+
+    pub fn sample_backward(&self, net: UNet<B>, simple_var: bool) -> burn::tensor::Tensor<B, 4> {
+        let batch_size = 32; 
+        let height = 28; 
+        let width = 28; 
+
+        let mut x = Tensor::<B, 4>::random([batch_size, 1, height, width], Distribution::Standard);
+        for t in self.n_steps..=0 {
+            self.sample_backward_step(&mut x, t, &net, simple_var); 
+        }
+
+        return x; 
+    }
+
+    pub fn sample_backward_step(&self, x_t: &mut Tensor<B, 4>, t: usize, net: &UNet<B>, simple_var:     bool) {
+        // batch size 
+        let n = x_t.shape().dims[0]; 
+        let t_vec = vec![t as f32; n];
+        let t_tensor = Tensor::<B, 1>::from_floats(t_vec.as_slice());
+        let eps = net(x_t, t_tensor); 
+    
+        let noise; 
+        if t == 0 {
+            noise = 0; 
+        } else {
+
+        }
+    }
 }
 
 pub fn visualize_forward() {
     let n_steps = 100; 
 
-    type B = NdArrayBackend<f32>;
-    let device = NdArrayDevice::Cpu; 
+    let device: NdArrayDevice = D::Cpu; 
     let batcher_train: MNISTBatcher<B> = MNISTBatcher::new(device.clone());
     let dataloader_train = DataLoaderBuilder::new(batcher_train)
-        .batch_size(1)
+        .batch_size(3)
         .shuffle(42)
         .num_workers(1)
         .build(MNISTDataset::train());
@@ -83,24 +114,29 @@ pub fn visualize_forward() {
     let batch = dataloader_train.iter().next().unwrap(); 
     let tensor: burn::tensor::Data<f32, 3> = batch.images.into_data();
     let shape = tensor.shape; 
-    let x = Array3::from_shape_vec((shape.dims[0], shape.dims[1], shape.dims[2]), tensor.value).unwrap();
-    let x = x.remove_axis(Axis(0));
+    let arr = Array3::from_shape_vec((shape.dims[0], shape.dims[1], shape.dims[2]), tensor.value).unwrap();
 
     let ddpm = DDPM::new(n_steps); 
-    let percents = Array1::linspace(0.0, 0.99, 10); 
-    for (i, &p) in percents.iter().enumerate() {
-        let t = (n_steps as f32) * p; 
-        let x_t = ddpm.sample_forward(x.clone(), t as usize, None); 
+    let percents = Array1::linspace(0.0, 0.99, 10);
+    
+    // iterate along the first dimension 
+    for (i, x) in arr.axis_iter(Axis(0)).enumerate() {
+        for (j, &p) in percents.iter().enumerate() {
+            let t = (n_steps as f32) * p; 
+            let x_t = ddpm.sample_forward(x.to_owned(), t as usize, None); 
+    
+            let (height, width) = x_t.dim();
+            let x_t = x_t.mapv(|pixel| ((pixel+1.0) / 2.0 * 255.0) as u8);
+            let image_buffer = ImageBuffer::from_fn(width as u32, height as u32, |x, y| {
+                let pixel = x_t[[y as usize, x as usize]];
+                image::Luma([pixel])
+            });
+    
+            image_buffer.save(format!("./images/forward_{i:02}_{j:02}.png")).unwrap();
+        } 
+    }
+ 
 
-        let (height, width) = x_t.dim();
-        let x_t = x_t.mapv(|pixel| ((pixel+1.0) / 2.0 * 255.0) as u8);
-        let image_buffer = ImageBuffer::from_fn(width as u32, height as u32, |x, y| {
-            let pixel = x_t[[y as usize, x as usize]];
-            image::Luma([pixel])
-        });
-
-        image_buffer.save(format!("./images/forward_{i}.png")).unwrap();
-    } 
 }
 
 mod tests {
