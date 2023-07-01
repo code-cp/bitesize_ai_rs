@@ -14,7 +14,7 @@ use burn::{
 
 use burn_ndarray::{NdArrayBackend, NdArrayDevice}; 
 use burn_train::metric::{Adaptor, LossInput};
-use burn_tensor::{loss::cross_entropy_with_logits, Data, Distribution};
+use burn_tensor::{loss::cross_entropy_with_logits, Data, Shape, Distribution};
 
 use ndarray::{Array, Array1, Array2, Array3, s, Axis};
 use ndarray_rand::RandomExt;
@@ -249,11 +249,10 @@ impl<B: Backend> Decoder<B> {
     } 
 }
 
-#[derive(Module, Debug)]
+#[derive(Module, Debug, Clone)]
 pub struct UNet {
     encoder: Encoder<B>, 
     decoder: Decoder<B>, 
-    n_steps: usize, 
 }
 
 impl UNet {
@@ -267,7 +266,6 @@ impl UNet {
         Self {
             encoder, 
             decoder,  
-            n_steps, 
         }
     }
 
@@ -284,7 +282,7 @@ impl UNet {
         let mut labels = Vec::new(); 
 
         let batch_size = images.shape().dims[0]; 
-        let t_batch = Array::random((batch_size,), Uniform::new(0, self.n_steps));
+        let t_batch = Array::random((batch_size,), Uniform::new(0, ddpm.n_steps));
 
         for i in 0..batch_size {
             let img = images.index([i..i+1, 0..28, 0..28]).squeeze(0);
@@ -301,7 +299,13 @@ impl UNet {
             
             let t = t_batch[i]; 
             let x_ndarray = ddpm.sample_forward(x, t, Some(eps));
-            let x_t = Tensor::from_tensor(x_ndarray);
+            let dim = x_ndarray.dim(); 
+            let float_array: Vec<Vec<f32>> = x_ndarray
+                .axis_iter(Axis(0))
+                .map(|row| row.to_vec())
+                .collect();
+            let data = Data::new(float_array, Shape::new([dim.0, dim.1])); 
+            let x_t = Tensor::from_data(data);
             let x_t = x_t.unsqueeze::<4>(); 
 
             let eps_theta = self.forward(x_t, t); 
@@ -317,15 +321,17 @@ impl UNet {
     }
 }
 
-impl<B: ADBackend> TrainStep<MNISTBatch<B>, RegressionOutput<B>> for UNet {
-    fn step(&self, item: MNISTBatch<B>, ddpm: DDPM) -> TrainOutput<RegressionOutput<B>> {
-        let item = self.forward_regression(item, ddpm); 
+impl TrainStep<MNISTBatch<B>, RegressionOutput<B>> for UNet {
+    fn step(&self, item: MNISTBatch<B>) -> TrainOutput<RegressionOutput<B>> {
+        let ddpm = DDPM::new(1000);
+        let item = self.forward_regression(ddpm, item); 
         TrainOutput::new(self, item.loss.backward(), item)
     }
 }
 
-impl<B: Backend> ValidStep<MNISTBatch<B>, RegressionOutput<B>> for UNet {
-    fn step(&self, item: MNISTBatch<B>, ddpm: DDPM) -> RegressionOutput<B> {
-        self.forward_regression(item, ddpm)
+impl ValidStep<MNISTBatch<B>, RegressionOutput<B>> for UNet {
+    fn step(&self, item: MNISTBatch<B>) -> RegressionOutput<B> {
+        let ddpm = DDPM::new(1000);
+        self.forward_regression(ddpm, item)
     }
 }

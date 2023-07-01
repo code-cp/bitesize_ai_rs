@@ -71,7 +71,7 @@ impl DDPM {
         res         
     }
 
-    pub fn sample_backward(&self, net: UNet<B>, simple_var: bool) -> burn::tensor::Tensor<B, 4> {
+    pub fn sample_backward(&self, net: UNet, simple_var: bool) -> burn::tensor::Tensor<B, 4> {
         let batch_size = 32; 
         let height = 28; 
         let width = 28; 
@@ -84,7 +84,7 @@ impl DDPM {
         return x; 
     }
 
-    pub fn sample_backward_step(&self, x_t: &mut Tensor<B, 4>, t: usize, net: &UNet<B>, simple_var:     bool) {
+    pub fn sample_backward_step(&self, x_t: &mut Tensor<B, 4>, t: usize, net: &UNet, simple_var:     bool) {
         // batch size 
         let n = x_t.shape().dims[0]; 
         let eps = net.forward(x_t.to_owned(), t); 
