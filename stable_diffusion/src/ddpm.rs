@@ -79,7 +79,7 @@ impl DDPM {
 
         let mut x = Tensor::<B, 4>::random([batch_size, 1, height, width], Distribution::Standard);
         for t in self.n_steps..=0 {
-            self.sample_backward_step(&mut x, t, &net); 
+            x = self.sample_backward_step(&mut x, t, &net); 
         }
 
         return x; 

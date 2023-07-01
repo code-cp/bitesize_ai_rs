@@ -38,7 +38,7 @@ pub struct MnistTrainingConfig {
     pub optimizer: AdamConfig,
 }
 
-pub fn run<B: ADBackend<InnerBackend = NdArrayBackend<f32>>>(device: <B as Backend>::Device) {
+pub fn run<B: ADBackend<InnerBackend = NdArrayBackend<f32>>>(device: <B as Backend>::Device) -> UNet {
     // Config
     let config_optimizer = AdamConfig::new().with_weight_decay(Some(WeightDecayConfig::new(5e-5)));
     let config = MnistTrainingConfig::new(config_optimizer);
@@ -82,8 +82,10 @@ pub fn run<B: ADBackend<InnerBackend = NdArrayBackend<f32>>>(device: <B as Backe
 
     NoStdTrainingRecorder::new()
         .record(
-            <UNet as Module<B>>::into_record(model_trained),
+            <UNet as Module<B>>::into_record(model_trained.clone()),
             format!("{ARTIFACT_DIR}/model").into(),
         )
         .expect("Failed to save trained model");
+
+    model_trained
 }
