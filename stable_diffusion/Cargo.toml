@@ -6,9 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-burn = { version = "0.7.0" }
-burn-ndarray = {version = "0.7.0", features = ["blas-accelerate"]}
-burn-autodiff = "0.7.0"
+burn = { path = "third-party/burn/burn" }
+burn-ndarray = { path = "third-party/burn/burn-ndarray", features = ["blas-accelerate"]}
+burn-autodiff = { path = "third-party/burn/burn-autodiff"} 
+burn-train = { path = "third-party/burn/burn-train" } 
+burn-tensor = { path = "third-party/burn/burn-tensor" } 
 
 ndarray = "0.15.6"
 ndarray-rand = "0.14.0"

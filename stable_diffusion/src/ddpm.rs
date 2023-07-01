@@ -87,9 +87,7 @@ impl DDPM {
     pub fn sample_backward_step(&self, x_t: &mut Tensor<B, 4>, t: usize, net: &UNet<B>, simple_var:     bool) {
         // batch size 
         let n = x_t.shape().dims[0]; 
-        let t_vec = vec![t as f32; n];
-        let t_tensor = Tensor::<B, 1>::from_floats(t_vec.as_slice());
-        let eps = net(x_t, t_tensor); 
+        let eps = net.forward(x_t.to_owned(), t); 
     
         let noise; 
         if t == 0 {

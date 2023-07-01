@@ -1,5 +1,5 @@
 use crate::data::MNISTBatcher;
-use crate::model::Model;
+use crate::model::UNet;
 use crate::ddpm::*; 
 
 use burn::module::Module;
@@ -11,7 +11,7 @@ use burn::{
     data::{dataloader::DataLoaderBuilder, dataset::source::huggingface::MNISTDataset},
     tensor::backend::ADBackend,
     train::{
-        metric::{AccuracyMetric, LossMetric},
+        metric::{LossMetric},
         LearnerBuilder,
     },
 };
@@ -35,7 +35,7 @@ pub struct MnistTrainingConfig {
     pub optimizer: AdamConfig,
 }
 
-pub fn run<B: ADBackend>(device: B::Device) {
+pub fn run<B: ADBackend>(device: B::Device, ddpm: DDPM) {
     // Config
     let config_optimizer = AdamConfig::new().with_weight_decay(Some(WeightDecayConfig::new(5e-5)));
     let config = MnistTrainingConfig::new(config_optimizer);
@@ -58,15 +58,18 @@ pub fn run<B: ADBackend>(device: B::Device) {
         .build(MNISTDataset::test());
 
     // Model
+    let n_steps = ddpm.n_steps; 
+    let batch_size = config.batch_size; 
+    let en_chs = vec![3,64,128,256,512,1024]; 
+    let de_chs = vec![1024, 512, 256, 128, 64]; 
+
     let learner = LearnerBuilder::new(ARTIFACT_DIR)
-        .metric_train_plot(AccuracyMetric::new())
-        .metric_valid_plot(AccuracyMetric::new())
         .metric_train_plot(LossMetric::new())
         .metric_valid_plot(LossMetric::new())
         .with_file_checkpointer(1, CompactRecorder::new())
         .devices(vec![device])
         .num_epochs(config.num_epochs)
-        .build(Model::new(), config.optimizer.init(), 1e-4);
+        .build(UNet::new(n_steps, batch_size, en_chs, de_chs), config.optimizer.init(), 1e-4);
 
     let model_trained = learner.fit(dataloader_train, dataloader_test);
 
