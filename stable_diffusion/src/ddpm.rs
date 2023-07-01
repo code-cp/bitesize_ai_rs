@@ -13,7 +13,8 @@ use image::{ImageBuffer};
 use crate::data::MNISTBatcher;
 use crate::model::UNet; 
 
-type B = NdArrayBackend<f32>;
+// type B = NdArrayBackend<f32>;
+type B = burn_autodiff::ADBackendDecorator<NdArrayBackend<f32>>;
 type D = NdArrayDevice;
 
 pub struct DDPM {
@@ -71,30 +72,39 @@ impl DDPM {
         res         
     }
 
-    pub fn sample_backward(&self, net: UNet, simple_var: bool) -> burn::tensor::Tensor<B, 4> {
+    pub fn sample_backward(&self, net: UNet) -> burn::tensor::Tensor<B, 4> {
         let batch_size = 32; 
         let height = 28; 
         let width = 28; 
 
         let mut x = Tensor::<B, 4>::random([batch_size, 1, height, width], Distribution::Standard);
         for t in self.n_steps..=0 {
-            self.sample_backward_step(&mut x, t, &net, simple_var); 
+            self.sample_backward_step(&mut x, t, &net); 
         }
 
         return x; 
     }
 
-    pub fn sample_backward_step(&self, x_t: &mut Tensor<B, 4>, t: usize, net: &UNet, simple_var:     bool) {
-        // batch size 
-        let n = x_t.shape().dims[0]; 
+    pub fn sample_backward_step(&self, x_t: &mut Tensor<B, 4>, t: usize, net: &UNet) -> Tensor<B, 4> {
         let eps = net.forward(x_t.to_owned(), t); 
     
-        let noise; 
+        let mut noise: Tensor<B, 4>; 
         if t == 0 {
-            noise = 0; 
+            noise = Tensor::zeros(x_t.shape()); 
         } else {
-
+            let var = self.betas[t];  
+            noise = Tensor::random(x_t.shape(), Distribution::Normal(0.0, 1.0)); 
+            noise = noise.mul_scalar(var.sqrt());
         }
+
+        // mean = (x_t - (1 - self.alphas[t]) / torch.sqrt(1 - self.alpha_bars[t]) * eps) 
+        //     / torch.sqrt(self.alphas[t])
+        let coef = 1.0 - self.alphas[t]; 
+        let coef = coef / (1.0 - self.alpha_bars[t]).sqrt(); 
+        let x = x_t.clone().sub(eps.mul_scalar(coef)); 
+        let mean = x.div_scalar(self.alphas[t].sqrt());
+
+        mean + noise 
     }
 }
 

@@ -9,12 +9,15 @@ use burn::record::{CompactRecorder, NoStdTrainingRecorder, Recorder};
 use burn::{
     config::Config,
     data::{dataloader::DataLoaderBuilder, dataset::source::huggingface::MNISTDataset},
-    tensor::backend::ADBackend,
+    tensor::backend::{ADBackend, Backend},
     train::{
         metric::{LossMetric},
         LearnerBuilder,
     },
 };
+
+use burn_autodiff::ADBackendDecorator;
+use burn_ndarray::{NdArrayBackend, NdArrayDevice}; 
 
 static ARTIFACT_DIR: &str = "./tmp";
 
@@ -35,15 +38,15 @@ pub struct MnistTrainingConfig {
     pub optimizer: AdamConfig,
 }
 
-pub fn run<B: ADBackend>(device: B::Device) {
+pub fn run<B: ADBackend<InnerBackend = NdArrayBackend<f32>>>(device: <B as Backend>::Device) {
     // Config
     let config_optimizer = AdamConfig::new().with_weight_decay(Some(WeightDecayConfig::new(5e-5)));
     let config = MnistTrainingConfig::new(config_optimizer);
     B::seed(config.seed);
 
     // Data
-    let batcher_train = MNISTBatcher::<B>::new(device.clone());
-    let batcher_valid = MNISTBatcher::<B::InnerBackend>::new(device.clone());
+    let batcher_train = MNISTBatcher::<ADBackendDecorator<NdArrayBackend<f32>>>::new(NdArrayDevice::Cpu);
+    let batcher_valid = MNISTBatcher::<ADBackendDecorator<NdArrayBackend<f32>>>::new(NdArrayDevice::Cpu);
 
     let dataloader_train = DataLoaderBuilder::new(batcher_train)
         .batch_size(config.batch_size)
@@ -69,7 +72,7 @@ pub fn run<B: ADBackend>(device: B::Device) {
         .with_file_checkpointer(1, CompactRecorder::new())
         .devices(vec![device])
         .num_epochs(config.num_epochs)
-        .build(UNet::new(n_steps, batch_size, en_chs, de_chs), config.optimizer.init(), 1e-4);
+        .build(UNet::new(n_steps, batch_size, en_chs, de_chs), config.optimizer.init::<B, UNet>(), 1e-4);
 
     let model_trained = learner.fit(dataloader_train, dataloader_test);
 
@@ -79,7 +82,7 @@ pub fn run<B: ADBackend>(device: B::Device) {
 
     NoStdTrainingRecorder::new()
         .record(
-            model_trained.into_record(),
+            <UNet as Module<B>>::into_record(model_trained),
             format!("{ARTIFACT_DIR}/model").into(),
         )
         .expect("Failed to save trained model");
