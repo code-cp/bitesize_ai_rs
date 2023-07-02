@@ -29,22 +29,20 @@ type B = burn_autodiff::ADBackendDecorator<NdArrayBackend<f32>>;
 pub struct PositionalEmbedding<B: Backend> {
     embedding: nn::Embedding<B>,
     max_seq_length: usize, 
-    batch_size: usize,  
 }
 
 impl<B: Backend> PositionalEmbedding<B> {
-    pub fn new(batch_size: usize, max_seq_length: usize, d_model: usize) -> Self {
+    pub fn new(max_seq_length: usize, d_model: usize) -> Self {
         let embedding = EmbeddingConfig::new(max_seq_length, d_model).init(); 
         Self {
             embedding,
             max_seq_length, 
-            batch_size,  
         }
     }
 
     pub fn forward(&self, t: usize) -> Tensor<B, 3> {
         // ref https://github.com/burn-rs/burn/blob/f99fe0faddfa9152f0049532b94ce33177dd55f9/examples/text-generation/src/model.rs
-        let index_positions = Tensor::ones(Shape::new([self.batch_size, 1])).mul_scalar(t as f32);
+        let index_positions = Tensor::ones(Shape::new([1, 1])).mul_scalar(t as f32);
         // println!("embed weight shape {:?}", self.embedding.clone().into_record().weight.shape()); 
         let embed = self.embedding.forward(index_positions); 
         // println!("embed weight shape {:?}", embed.shape()); 
@@ -159,13 +157,13 @@ impl<B: Backend> Encoder<B> {
             let pe = pe_layer.forward(self.embedding.forward(t));
             let pe = pe.unsqueeze::<4>(); 
             let pe = pe.swap_dims(1, 3);
-            println!("Encoder: x shape {:?} pe shape {:?}", x.shape(), pe.shape()); 
+            // println!("Encoder: x shape {:?} pe shape {:?}", x.shape(), pe.shape()); 
             x = x.clone() + pe; 
             x = block.forward(x);
             xs.push(x.clone()); 
             x = pool.forward(x); 
         }
-        println!("Encoder forward finish"); 
+        // println!("Encoder forward finish"); 
         xs 
     }
 }
@@ -191,8 +189,10 @@ impl<B: Backend> PEDecoderBlcok<B> {
 pub struct Decoder<B: Backend> {
     channels: Vec<usize>, 
     blocks: Vec<UNetBlock<B>>,
+    upconvs: Vec<nn::conv::Conv2d<B>>, 
     embedding: PositionalEmbedding<B>, 
     pe_blocks: Vec<PEDecoderBlcok<B>>, 
+    conv_out: nn::conv::Conv2d<B>, 
 }
 
 impl<B: Backend> Decoder<B> {
@@ -203,63 +203,46 @@ impl<B: Backend> Decoder<B> {
             )
             .collect();
 
+        // NOTE, there is no convtranspose2d layer in burn, it's backward pass is yet to be implemented 
+        let kernel_size = [3; 2]; 
+        let upconvs = (0..channels.len()-1).map(
+            |i| nn::conv::Conv2dConfig::new([channels[i], channels[i+1]], kernel_size)
+            .with_padding(Conv2dPaddingConfig::Explicit(1,1))
+            .init()
+        ).collect(); 
+
         let pe_dim = 128;
-        let pe_blocks = (0..channels.len()-1)
+        let pe_blocks = (1..channels.len())
             .map(|i| PEDecoderBlcok::new(pe_dim, channels[i]))
             .collect(); 
+
+        let conv_out = nn::conv::Conv2dConfig::new([channels[channels.len()-1], 1], kernel_size)
+        .with_padding(Conv2dPaddingConfig::Explicit(1,1))
+        .init();  
 
         Decoder {
             channels, 
             blocks, 
+            upconvs, 
             embedding,
             pe_blocks,  
+            conv_out, 
         }
-    }
-
-    pub fn crop(&self, x: Tensor<B, 4>, encoder_feature: Tensor<B, 4>) -> Tensor<B, 4> {
-        let new_height = x.shape().dims[2]; 
-        let new_width = x.shape().dims[3];
-
-        let height = encoder_feature.shape().dims[2]; 
-        let width = encoder_feature.shape().dims[3];
-
-        // Calculate the starting indices for cropping
-        let start_h = (height - new_height) / 2;
-        let start_w = (width - new_width) / 2;
-
-        // Perform the crop
-        encoder_feature.index([start_h..start_h + height, start_w..start_w + width]).clone()
     }
 
     pub fn forward(&self, input: Tensor<B, 4>, encoder_features: Vec<Tensor<B, 4>>, t: usize) -> Tensor<B, 4> {
+        // println!("Decoder forward begin");  
         let mut x = input.clone(); 
         for i in 0..self.channels.len()-1 {
-            // NOTE, there is no convtranspose2d layer in burn, it's backward pass is yet to be implemented 
-            // ref https://pytorch.org/docs/stable/generated/torch.nn.ConvTranspose2d.html?highlight=convtranspose2d#torch.nn.ConvTranspose2d
-            // padding controls the amount of implicit zero padding on both sides for dilation * (kernel_size - 1) - padding
-            // ref https://pytorch.org/docs/stable/generated/torch.nn.functional.conv_transpose2d.html?highlight=conv_transpose2d#torch.nn.functional.conv_transpose2d
-            // for weight size 
-            // let weight = self.blocks[i].conv1.into_record().weight.detach(); 
-            // let weight = self.blocks[i].conv1.clone().into_record().weight.ones_like();
-
-            println!("Decoder forward begin");  
+            x = self.upconvs[i].forward(x); 
             let pe = self.pe_blocks[i].forward(self.embedding.forward(t));
             let pe = pe.unsqueeze::<4>();  
             let pe = pe.swap_dims(1, 3);
-            println!("Decoder: x shape {:?} pe shape {:?}, encoder_feature shape {:?}", x.shape(), pe.shape(), encoder_features[i].shape());  
-            // x = conv_transpose2d(x, weight, None, 
-            //     ConvTransposeOptions::new(
-            //         [2, 2],
-            //         [1, 1],
-            //         [0, 0],
-            //         [1, 1],
-            //         1,
-            //     ),
-            // ); 
-            // let feature = self.crop(x.clone(), encoder_features[i].clone()); 
-            x = Tensor::cat(vec![x.clone(), pe, encoder_features[i].clone()], 1); 
+            // println!("Decoder: x shape {:?} pe shape {:?}, encoder_feature shape {:?}", x.shape(), pe.shape(), encoder_features[i].shape());  
+            x = Tensor::cat(vec![x.clone() + pe, encoder_features[i].clone()], 1); 
             x = self.blocks[i].forward(x); 
         }
+        x = self.conv_out.forward(x); 
         x
     } 
 }
@@ -277,9 +260,9 @@ impl std::fmt::Display for UNet {
 }
 
 impl UNet {
-    pub fn new(n_steps: usize, batch_size: usize, en_chs: Vec<usize>, de_chs: Vec<usize>) -> Self {
+    pub fn new(n_steps: usize, en_chs: Vec<usize>, de_chs: Vec<usize>) -> Self {
        let pe_dim = 128;
-        let embedding = PositionalEmbedding::new(batch_size, n_steps, pe_dim); 
+        let embedding = PositionalEmbedding::new(n_steps, pe_dim); 
         
         let encoder = Encoder::<B>::new(en_chs, embedding.clone());
         let decoder = Decoder::<B>::new(de_chs, embedding.clone()); 
@@ -306,8 +289,11 @@ impl UNet {
         let t_batch = Array::random((batch_size,), Uniform::new(0, ddpm.n_steps));
 
         for i in 0..batch_size {
+            // println!("{:?} th batch", i); 
             let img = images.clone().index([i..i+1, 0..28, 0..28]).squeeze(0);
+            // println!("forward regression: img size {:?}", img.shape()); 
             let eps_tensor = Tensor::random(img.shape(), Distribution::Normal(0.0, 1.0)); 
+            // println!("forward regression: eps_tensor size {:?}", eps_tensor.shape());
             labels.push(eps_tensor.clone()); 
 
             let tensor: burn::tensor::Data<f32, 2> = img.into_data();
@@ -317,7 +303,8 @@ impl UNet {
             let tensor: burn::tensor::Data<f32, 2> = eps_tensor.into_data();
             let shape = tensor.shape; 
             let eps = Array2::from_shape_vec((shape.dims[0], shape.dims[1]), tensor.value).unwrap();
-            
+
+            // println!("forward pass");  
             let t = t_batch[i]; 
             let x_ndarray = ddpm.sample_forward(x, t, Some(eps));
             // convert ndarray to tensor 
@@ -326,8 +313,10 @@ impl UNet {
             let x_tensor = Tensor::from_data(x_data); 
             let x_t = x_tensor.reshape(Shape::new([28, 28]));
             let x_t = x_t.unsqueeze::<4>(); 
-
+            
+            // println!("forward regression: x_t size {:?}", x_t.shape()); 
             let eps_theta: Tensor<B, 4> = self.forward(x_t, t); 
+            // println!("forward regression: eps_theta size {:?}", eps_theta.shape()); 
             let eps_theta: Tensor<B, 3> = eps_theta.squeeze(0);
             let eps_theta: Tensor<B, 2> = eps_theta.squeeze(0); 
             predictions.push(eps_theta); 
@@ -337,6 +326,9 @@ impl UNet {
         let targets = Tensor::cat(labels, 0); 
         let loss = MSELoss::new();
         let loss = loss.forward(output.clone(), targets.clone(), Reduction::Mean);    
+
+        // println!("output shape {:?}", output.shape()); 
+        // println!("targets shape {:?}", targets.shape());
 
         RegressionOutput { loss, output, targets } 
     }
