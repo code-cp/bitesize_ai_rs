@@ -26,7 +26,8 @@ pub struct MnistTrainingConfig {
     #[config(default = 1)]
     pub num_epochs: usize,
 
-    #[config(default = 256)]
+    // #[config(default = 256)]
+    #[config(default = 1)]
     pub batch_size: usize,
 
     #[config(default = 32)]
@@ -63,7 +64,7 @@ pub fn run<B: ADBackend<InnerBackend = NdArrayBackend<f32>>>(device: <B as Backe
     // Model
     let n_steps = 1000; 
     let batch_size = config.batch_size; 
-    let en_chs = vec![3,64,128,256,512,1024]; 
+    let en_chs = vec![1,64,128,256,512,1024]; 
     let de_chs = vec![1024, 512, 256, 128, 64]; 
 
     let learner = LearnerBuilder::new(ARTIFACT_DIR)
