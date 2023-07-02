@@ -1,5 +1,7 @@
-## how to run 
+## about 
 
+- this repo contains a simple implementation of stable diffusion 
+- tested on Mac M1 chip 
 - cargo run --release --features tch-gpu
 
 ## references 

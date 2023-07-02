@@ -56,6 +56,22 @@ pub fn pad(source: Tensor<B, 4>, target: Tensor<B, 4>) -> Tensor<B, 4> {
     result 
 }
 
+pub fn crop(source: Tensor<B, 4>, target: Tensor<B, 4>) -> Tensor<B, 4> {
+    let new_height = target.shape().dims[2]; 
+    let new_width = target.shape().dims[3];
+
+    let batch_size = source.shape().dims[0]; 
+    let channel = source.shape().dims[1]; 
+    let height = source.shape().dims[2]; 
+    let width = source.shape().dims[3];
+
+    // Calculate the starting indices for cropping
+    let start_h = (height - new_height) / 2;
+    let start_w = (width - new_width) / 2;
+
+    // Perform the crop
+    source.index([0..batch_size, 0..channel, start_h..start_h + new_height, start_w..start_w + new_width]).clone()
+}
 
 #[derive(Module, Debug)]
 pub struct PositionalEmbedding<B: Backend> {
@@ -82,8 +98,8 @@ impl<B: Backend> PositionalEmbedding<B> {
     }
 }
 
-#[derive(Module, Debug)]
-pub struct UNetBlock<B: Backend> {
+#[derive(Module, Debug, Clone)]
+pub struct UNetBlock {
     conv1: nn::conv::Conv2d<B>, 
     conv2: nn::conv::Conv2d<B>, 
     activation: nn::ReLU,
@@ -91,7 +107,7 @@ pub struct UNetBlock<B: Backend> {
     residual_conv: nn::conv::Conv2d<B>, 
 }
 
-impl<B: Backend> UNetBlock<B> {
+impl UNetBlock {
     pub fn new(in_ch: usize, out_ch: usize) -> Self {
         let kernel_size = [3,3];  
         let conv1 = nn::conv::Conv2dConfig::new([in_ch, out_ch], kernel_size)
@@ -101,6 +117,7 @@ impl<B: Backend> UNetBlock<B> {
             .with_padding(Conv2dPaddingConfig::Valid)
             .init(); 
 
+        // let d_model = 
         // let layer_norm = nn::LayerNormConfig::new(d_model).init(); 
         let residual_conv = nn::conv::Conv2dConfig::new([in_ch, out_ch], [1,1]).init();
 
@@ -118,9 +135,9 @@ impl<B: Backend> UNetBlock<B> {
         let x = self.conv1.forward(input.clone()); 
         let x = self.activation.forward(x); 
         let x = self.conv2.forward(x); 
-        // let residual = self.residual_conv.forward(input);
-        // println!("x shape {:?} residual shape {:?}", x.shape(), residual.shape());  
-        // let x = x + residual;
+        let residual = crop(input.clone(), x.clone());
+        let residual = self.residual_conv.forward(residual); 
+        let x = x.add(residual);
         self.activation.forward(x)
     }
 }
@@ -151,17 +168,17 @@ impl<B: Backend> PEEncoderBlock<B> {
     }
 }
 
-#[derive(Module, Debug)]
-pub struct Encoder<B: Backend> {
-    blocks: Vec<UNetBlock<B>>,
+#[derive(Module, Debug, Clone)]
+pub struct Encoder {
+    blocks: Vec<UNetBlock>,
     downsampling: Vec<nn::pool::MaxPool2d>, 
     embedding: PositionalEmbedding<B>, 
     pe_blocks: Vec<PEEncoderBlock<B>>, 
 }
 
-impl<B: Backend> Encoder<B> {
+impl Encoder {
     pub fn new(channels: Vec<usize>, embedding: PositionalEmbedding<B>) -> Self {
-        let blocks: Vec<UNetBlock<B>> = (0..channels.len()-1)
+        let blocks: Vec<UNetBlock> = (0..channels.len()-1)
             .map(|i| UNetBlock::new(channels[i], channels[i+1]))
             .collect();
         let kernel_size = [2; 2]; 
@@ -226,7 +243,7 @@ impl<B: Backend> PEDecoderBlcok<B> {
 #[derive(Module, Debug, Clone)]
 pub struct Decoder {
     channels: Vec<usize>, 
-    blocks: Vec<UNetBlock<B>>,
+    blocks: Vec<UNetBlock>,
     upconvs: Vec<nn::conv::Conv2d<B>>, 
     embedding: PositionalEmbedding<B>, 
     pe_blocks: Vec<PEDecoderBlcok<B>>, 
@@ -295,7 +312,7 @@ impl Decoder {
 
 #[derive(Module, Debug, Clone)]
 pub struct UNet {
-    encoder: Encoder<B>, 
+    encoder: Encoder, 
     decoder: Decoder, 
 }
 
@@ -310,7 +327,7 @@ impl UNet {
        let pe_dim = 128;
         let embedding = PositionalEmbedding::new(n_steps, pe_dim); 
         
-        let encoder = Encoder::<B>::new(en_chs, embedding.clone());
+        let encoder = Encoder::new(en_chs, embedding.clone());
         let decoder = Decoder::new(de_chs, embedding.clone()); 
 
         Self {
