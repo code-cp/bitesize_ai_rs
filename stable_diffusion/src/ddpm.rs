@@ -21,6 +21,14 @@ use burn_tch::{TchBackend, TchDevice};
 type B = burn_autodiff::ADBackendDecorator<TchBackend<f32>>;
 type D = TchDevice;
 
+fn clamp(tensor: Tensor<B, 4>, min: f32, max: f32) -> Tensor<B, 4> {
+    let greater_mask = tensor.clone().greater_elem(max);
+    let lower_mask = tensor.clone().lower_elem(min);
+
+    tensor.mask_fill(greater_mask,max)
+        .mask_fill(lower_mask, min)
+}
+
 pub struct DDPM {
     pub betas: Array1<f32>, 
     pub alphas: Array1<f32>,
@@ -105,7 +113,7 @@ impl DDPM {
         let coef = coef / (1.0 - self.alpha_bars[t]).sqrt(); 
         let x_0 = x_t.clone().sub(eps.mul_scalar(coef)); 
         let x_0 = x_0.div_scalar(self.alphas[t].sqrt()); 
-        // let x_0 = torch.clip(x_0, -1, 1)
+        let x_0 = clamp(x_0, -1.0, 1.0); 
         let mean = x_t.mul_scalar(self.coef1[t]) + x_0.mul_scalar(self.coef2[t]); 
 
         mean + noise 

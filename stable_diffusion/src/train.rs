@@ -8,7 +8,7 @@ use burn::optim::AdamConfig;
 use burn::record::{CompactRecorder, NoStdTrainingRecorder, Recorder};
 use burn::{
     config::Config,
-    data::{dataloader::DataLoaderBuilder, dataset::source::huggingface::MNISTDataset},
+    data::{dataloader::DataLoaderBuilder, dataset::source::huggingface::MNISTDataset, dataset::transform::PartialDataset},
     tensor::backend::{ADBackend, Backend},
     train::{
         metric::{LossMetric},
@@ -31,7 +31,7 @@ pub struct MnistTrainingConfig {
     pub num_epochs: usize,
 
     #[config(default = 512)]
-    // #[config(default = 32)]
+    // #[config(default = 100)]
     pub batch_size: usize,
 
     #[config(default = 32)]
@@ -57,13 +57,14 @@ pub fn run<B: ADBackend<InnerBackend = TchBackend<f32>>>(device: <B as Backend>:
         .batch_size(config.batch_size)
         .shuffle(config.seed)
         .num_workers(config.num_workers)
-        // .build(MNISTDataset::train());
-        .build(MNISTDataset::test());
+        .build(MNISTDataset::train());
+        // .build(PartialDataset::new(MNISTDataset::train(), 0, 100));// Index 0 to 100 
     let dataloader_test = DataLoaderBuilder::new(batcher_valid)
         .batch_size(config.batch_size)
         .shuffle(config.seed)
         .num_workers(config.num_workers)
-        .build(MNISTDataset::test());
+        // .build(MNISTDataset::test());
+        .build(PartialDataset::new(MNISTDataset::test(), 0, 100));// Index 0 to 100
 
     // Model
     let n_steps = 1000; 
