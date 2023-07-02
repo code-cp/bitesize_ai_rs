@@ -14,8 +14,12 @@ use crate::data::MNISTBatcher;
 use crate::model::UNet; 
 
 // type B = NdArrayBackend<f32>;
-type B = burn_autodiff::ADBackendDecorator<NdArrayBackend<f32>>;
-type D = NdArrayDevice;
+// type B = burn_autodiff::ADBackendDecorator<NdArrayBackend<f32>>;
+// type D = NdArrayDevice;
+
+use burn_tch::{TchBackend, TchDevice}; 
+type B = burn_autodiff::ADBackendDecorator<TchBackend<f32>>;
+type D = TchDevice;
 
 pub struct DDPM {
     pub betas: Array1<f32>, 
@@ -111,7 +115,8 @@ impl DDPM {
 pub fn visualize_forward() {
     let n_steps = 100; 
 
-    let device: NdArrayDevice = D::Cpu; 
+    // let device: NdArrayDevice = D::Cpu; 
+    let device = TchDevice::Mps; 
     let batcher_train: MNISTBatcher<B> = MNISTBatcher::new(device.clone());
     let dataloader_train = DataLoaderBuilder::new(batcher_train)
         .batch_size(3)

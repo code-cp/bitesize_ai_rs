@@ -18,10 +18,15 @@ use image::{ImageBuffer};
 use stable_diffusion::train; 
 use stable_diffusion::ddpm::*; 
 
-type B = ADBackendDecorator<NdArrayBackend<f32>>; 
+// type B = ADBackendDecorator<NdArrayBackend<f32>>; 
+
+use burn_tch::{TchBackend, TchDevice}; 
+type B = burn_autodiff::ADBackendDecorator<TchBackend<f32>>;
+// type D = TchDevice;
 
 fn main() {
-    let device = NdArrayDevice::Cpu; 
+    // let device = NdArrayDevice::Cpu; 
+    let device = TchDevice::Mps; 
     let model_trained = train::run::<B>(device); 
 
     let ddpm = DDPM::new(1000);

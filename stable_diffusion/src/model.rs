@@ -20,10 +20,13 @@ use ndarray::{Array, Array1, Array2, Array3, s, Axis};
 use ndarray_rand::RandomExt;
 use ndarray_rand::rand_distr::Uniform;
 
+use burn_tch::{TchBackend, TchDevice}; 
+
 use crate::ddpm::*; 
 
 // type B = NdArrayBackend<f32>;
-type B = burn_autodiff::ADBackendDecorator<NdArrayBackend<f32>>;
+// type B = burn_autodiff::ADBackendDecorator<NdArrayBackend<f32>>;
+type B = burn_autodiff::ADBackendDecorator<TchBackend<f32>>;
 
 #[derive(Module, Debug)]
 pub struct PositionalEmbedding<B: Backend> {

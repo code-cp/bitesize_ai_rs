@@ -7,10 +7,11 @@ edition = "2021"
 
 [dependencies]
 burn = { path = "third-party/burn/burn" }
-burn-ndarray = { path = "third-party/burn/burn-ndarray", features = ["blas-accelerate"]}
+burn-ndarray = { path = "third-party/burn/burn-ndarray" }
 burn-autodiff = { path = "third-party/burn/burn-autodiff"} 
 burn-train = { path = "third-party/burn/burn-train" } 
 burn-tensor = { path = "third-party/burn/burn-tensor" } 
+burn-tch = { path = "third-party/burn/burn-tch" }
 
 ndarray = "0.15.6"
 ndarray-rand = "0.14.0"

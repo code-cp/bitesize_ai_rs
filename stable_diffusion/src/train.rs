@@ -19,6 +19,10 @@ use burn::{
 use burn_autodiff::ADBackendDecorator;
 use burn_ndarray::{NdArrayBackend, NdArrayDevice}; 
 
+use burn_tch::{TchBackend, TchDevice}; 
+// type B = burn_autodiff::ADBackendDecorator<TchBackend<f32>>;
+// type D = TchDevice;
+
 static ARTIFACT_DIR: &str = "./tmp";
 
 #[derive(Config)]
@@ -27,7 +31,7 @@ pub struct MnistTrainingConfig {
     pub num_epochs: usize,
 
     #[config(default = 256)]
-    // #[config(default = 1)]
+    // #[config(default = 32)]
     pub batch_size: usize,
 
     #[config(default = 32)]
@@ -39,15 +43,15 @@ pub struct MnistTrainingConfig {
     pub optimizer: AdamConfig,
 }
 
-pub fn run<B: ADBackend<InnerBackend = NdArrayBackend<f32>>>(device: <B as Backend>::Device) -> UNet {
+pub fn run<B: ADBackend<InnerBackend = TchBackend<f32>>>(device: <B as Backend>::Device) -> UNet {
     // Config
     let config_optimizer = AdamConfig::new().with_weight_decay(Some(WeightDecayConfig::new(5e-5)));
     let config = MnistTrainingConfig::new(config_optimizer);
     B::seed(config.seed);
 
     // Data
-    let batcher_train = MNISTBatcher::<ADBackendDecorator<NdArrayBackend<f32>>>::new(NdArrayDevice::Cpu);
-    let batcher_valid = MNISTBatcher::<ADBackendDecorator<NdArrayBackend<f32>>>::new(NdArrayDevice::Cpu);
+    let batcher_train = MNISTBatcher::<ADBackendDecorator<TchBackend<f32>>>::new(TchDevice::Mps);
+    let batcher_valid = MNISTBatcher::<ADBackendDecorator<TchBackend<f32>>>::new(TchDevice::Mps);
 
     let dataloader_train = DataLoaderBuilder::new(batcher_train)
         .batch_size(config.batch_size)
@@ -72,7 +76,7 @@ pub fn run<B: ADBackend<InnerBackend = NdArrayBackend<f32>>>(device: <B as Backe
         .with_file_checkpointer(1, CompactRecorder::new())
         .devices(vec![device])
         .num_epochs(config.num_epochs)
-        .build(UNet::new(n_steps, en_chs, de_chs), config.optimizer.init::<B, UNet>(), 1e-4);
+        .build(UNet::new(n_steps, en_chs, de_chs), config.optimizer.init::<B, UNet>(), 1e-2);
 
     let model_trained = learner.fit(dataloader_train, dataloader_test);
 
