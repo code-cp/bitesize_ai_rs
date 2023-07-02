@@ -30,7 +30,7 @@ pub struct MnistTrainingConfig {
     #[config(default = 1)]
     pub num_epochs: usize,
 
-    #[config(default = 256)]
+    #[config(default = 512)]
     // #[config(default = 32)]
     pub batch_size: usize,
 
@@ -76,7 +76,7 @@ pub fn run<B: ADBackend<InnerBackend = TchBackend<f32>>>(device: <B as Backend>:
         .with_file_checkpointer(1, CompactRecorder::new())
         .devices(vec![device])
         .num_epochs(config.num_epochs)
-        .build(UNet::new(n_steps, en_chs, de_chs), config.optimizer.init::<B, UNet>(), 1e-2);
+        .build(UNet::new(n_steps, en_chs, de_chs), config.optimizer.init::<B, UNet>(), 1e-3);
 
     let model_trained = learner.fit(dataloader_train, dataloader_test);
 

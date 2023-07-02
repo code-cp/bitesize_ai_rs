@@ -5,13 +5,17 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = []
+tch-gpu = ["dep:burn-tch"]
+
 [dependencies]
 burn = { path = "third-party/burn/burn" }
 burn-ndarray = { path = "third-party/burn/burn-ndarray" }
 burn-autodiff = { path = "third-party/burn/burn-autodiff"} 
 burn-train = { path = "third-party/burn/burn-train" } 
 burn-tensor = { path = "third-party/burn/burn-tensor" } 
-burn-tch = { path = "third-party/burn/burn-tch" }
+burn-tch = { path = "third-party/burn/burn-tch", optional = true }
 
 ndarray = "0.15.6"
 ndarray-rand = "0.14.0"

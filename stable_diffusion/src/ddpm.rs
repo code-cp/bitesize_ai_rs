@@ -83,14 +83,14 @@ impl DDPM {
 
         let mut x = Tensor::<B, 4>::random([batch_size, 1, height, width], Distribution::Standard);
         for t in self.n_steps..=0 {
-            x = self.sample_backward_step(&mut x, t, &net); 
+            x = self.sample_backward_step(x, t, &net); 
         }
 
         return x; 
     }
 
-    pub fn sample_backward_step(&self, x_t: &mut Tensor<B, 4>, t: usize, net: &UNet) -> Tensor<B, 4> {
-        let eps = net.forward(x_t.to_owned(), t); 
+    pub fn sample_backward_step(&self, x_t: Tensor<B, 4>, t: usize, net: &UNet) -> Tensor<B, 4> {
+        let eps = net.forward(x_t.clone(), t); 
     
         let mut noise: Tensor<B, 4>; 
         if t == 0 {
@@ -101,12 +101,12 @@ impl DDPM {
             noise = noise.mul_scalar(var.sqrt());
         }
 
-        // mean = (x_t - (1 - self.alphas[t]) / torch.sqrt(1 - self.alpha_bars[t]) * eps) 
-        //     / torch.sqrt(self.alphas[t])
         let coef = 1.0 - self.alphas[t]; 
         let coef = coef / (1.0 - self.alpha_bars[t]).sqrt(); 
-        let x = x_t.clone().sub(eps.mul_scalar(coef)); 
-        let mean = x.div_scalar(self.alphas[t].sqrt());
+        let x_0 = x_t.clone().sub(eps.mul_scalar(coef)); 
+        let x_0 = x_0.div_scalar(self.alphas[t].sqrt()); 
+        // let x_0 = torch.clip(x_0, -1, 1)
+        let mean = x_t.mul_scalar(self.coef1[t]) + x_0.mul_scalar(self.coef2[t]); 
 
         mean + noise 
     }

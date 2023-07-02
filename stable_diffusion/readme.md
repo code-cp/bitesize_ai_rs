@@ -1,3 +1,7 @@
+## how to run 
+
+- cargo run --release --features tch-gpu
+
 ## references 
 
 - 2023 - 李宏毅 - Diffusion Model 原理剖析
