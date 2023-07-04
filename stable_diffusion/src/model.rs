@@ -178,7 +178,7 @@ pub struct Encoder {
 
 impl Encoder {
     pub fn new(channels: Vec<usize>, embedding: PositionalEmbedding<B>) -> Self {
-        let layer_shapes = vec![28, 23, 18, 13, 8];
+        let layer_shapes = vec![28, 23, 18];
         let blocks: Vec<UNetBlock> = (0..channels.len()-1)
             .map(|i| UNetBlock::new(channels[i], channels[i+1], layer_shapes[i]))
             .collect();
@@ -253,7 +253,7 @@ pub struct Decoder {
 
 impl Decoder {
     pub fn new(channels: Vec<usize>, embedding: PositionalEmbedding<B>) -> Self {
-        let layer_shapes = vec![9, 14, 19, 24];
+        let layer_shapes = vec![19, 24, 29];
         let blocks = (0..channels.len()-1)
             .map(
                 |i| UNetBlock::new(channels[i], channels[i+1], layer_shapes[i]) 
@@ -338,17 +338,6 @@ impl UNet {
         }
     }
 
-    // encoder part
-    // input shape Shape { dims: [1, 1, 28, 28] }
-    // input shape Shape { dims: [1, 64, 23, 23] }
-    // input shape Shape { dims: [1, 128, 18, 18] }
-    // input shape Shape { dims: [1, 256, 13, 13] }
-    // input shape Shape { dims: [1, 512, 8, 8] }
-    // decoder part
-    // input shape Shape { dims: [1, 1024, 9, 9] }
-    // input shape Shape { dims: [1, 512, 14, 14] }
-    // input shape Shape { dims: [1, 256, 19, 19] }
-    // input shape Shape { dims: [1, 128, 24, 24] }
     pub fn forward(&self, x: Tensor<B, 4>, t: usize) -> Tensor<B, 4> {
         // println!("encoder part"); 
         let mut encoder_features = self.encoder.forward(x, t);

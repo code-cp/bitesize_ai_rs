@@ -68,8 +68,8 @@ pub fn run<B: ADBackend<InnerBackend = TchBackend<f32>>>(device: <B as Backend>:
 
     // Model
     let n_steps = 1000; 
-    let en_chs = vec![1,64,128,256,512,1024]; 
-    let de_chs = vec![1024, 512, 256, 128, 64]; 
+    let en_chs = vec![1,20,40,80]; 
+    let de_chs = vec![80,40,20]; 
 
     let learner = LearnerBuilder::new(ARTIFACT_DIR)
         .metric_train_plot(LossMetric::new())
