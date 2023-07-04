@@ -30,19 +30,19 @@ type B = burn_autodiff::ADBackendDecorator<TchBackend<f32>>;
 // type D = TchDevice;
 
 // const MODEL_STATE_FILE_NAME: &str = "./tmp/checkpoint/model-1.mpk.gz";
+static N_STEPS: usize = 1000; 
 
 fn main() {
     // let device = NdArrayDevice::Cpu; 
     let device = TchDevice::Mps; 
     let model_trained = train::run::<B>(device); 
 
-    let n_steps = 1000; 
     // let en_chs = vec![1,64,128,256,512,1024]; 
     // let de_chs = vec![1024, 512, 256, 128, 64]; 
-    // let model = UNet::new(n_steps, en_chs, de_chs);
+    // let model = UNet::new(N_STEPS, en_chs, de_chs);
     // let model_trained = model.load_state(MODEL_STATE_FILE_NAME);
 
-    let ddpm = DDPM::new(n_steps);
+    let ddpm = DDPM::new(N_STEPS);
     let img = ddpm.sample_backward(model_trained); 
     // println!("img shape {:?}", img.shape()); 
     let img: Tensor<B, 4> = img.index([0..1, 0..1, 0..28, 0..28]);

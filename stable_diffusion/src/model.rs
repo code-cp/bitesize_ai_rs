@@ -31,6 +31,8 @@ type B = burn_autodiff::ADBackendDecorator<TchBackend<f32>>;
 // static DEBUG_FLAG: bool = true;  
 static DEBUG_FLAG: bool = false; 
 
+static N_STEPS: usize = 1000; 
+
 pub fn pad(source: Tensor<B, 4>, target: Tensor<B, 4>) -> Tensor<B, 4> {
     if DEBUG_FLAG {
         println!("pad source shape {:?} to target shape {:?}", source.shape(), target.shape()); 
@@ -80,6 +82,8 @@ pub struct PositionalEmbedding<B: Backend> {
 }
 
 impl<B: Backend> PositionalEmbedding<B> {
+    // This is a learned positional encoding, like Roberta. it's the simplest form where a bias is learned based on an index.
+    // Sin is useful when the model needs to generalize to sequence lengths not seen during training. For autoregressive models, it seems better now to not put any positional encoding, it's mostly useful for bidirectional transformers without an autoregressive mask.
     pub fn new(max_seq_length: usize, d_model: usize) -> Self {
         let embedding = EmbeddingConfig::new(max_seq_length, d_model).init(); 
         Self {
@@ -131,7 +135,10 @@ impl UNetBlock {
 
     pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
         // println!("input shape {:?}", input.shape()); 
-        let x = self.layer_norm.forward(input.clone()); 
+        // Layernorm in burn only normalizes along the last dimension, so need to flatten then reshape
+        let flatten: Tensor::<B, 3> = input.clone().flatten(2, 3);
+        let x = self.layer_norm.forward(flatten);
+        let x = x.reshape(input.shape()); 
         let x = self.conv1.forward(x); 
         let x = self.activation.forward(x); 
         let x = self.conv2.forward(x); 
@@ -178,7 +185,7 @@ pub struct Encoder {
 
 impl Encoder {
     pub fn new(channels: Vec<usize>, embedding: PositionalEmbedding<B>) -> Self {
-        let layer_shapes = vec![28, 23, 18];
+        let layer_shapes = vec![28*28, 23*23, 18*18];
         let blocks: Vec<UNetBlock> = (0..channels.len()-1)
             .map(|i| UNetBlock::new(channels[i], channels[i+1], layer_shapes[i]))
             .collect();
@@ -253,7 +260,7 @@ pub struct Decoder {
 
 impl Decoder {
     pub fn new(channels: Vec<usize>, embedding: PositionalEmbedding<B>) -> Self {
-        let layer_shapes = vec![19, 24, 29];
+        let layer_shapes = vec![19*19, 24*24, 29*29];
         let blocks = (0..channels.len()-1)
             .map(
                 |i| UNetBlock::new(channels[i], channels[i+1], layer_shapes[i]) 
@@ -368,13 +375,13 @@ impl UNet {
             let shape = tensor.shape; 
             let x = Array2::from_shape_vec((shape.dims[0], shape.dims[1]), tensor.value).unwrap();
 
-            let tensor: burn::tensor::Data<f32, 2> = eps_tensor.into_data();
+            let tensor: burn::tensor::Data<f32, 2> = eps_tensor.clone().into_data();
             let shape = tensor.shape; 
             let eps = Array2::from_shape_vec((shape.dims[0], shape.dims[1]), tensor.value).unwrap();
 
             // println!("forward pass");  
             let t = t_batch[i]; 
-            let x_ndarray = ddpm.sample_forward(x, t, Some(eps));
+            let x_ndarray = ddpm.sample_forward(x, t, Some(eps.clone()));
             // convert ndarray to tensor 
             let x_vec: Vec<f32> = x_ndarray.iter().map(|x| *x).collect();
             let x_data = Data::from(x_vec.as_slice()); 
@@ -387,7 +394,15 @@ impl UNet {
             // println!("forward regression: eps_theta size {:?}", eps_theta.shape()); 
             let eps_theta: Tensor<B, 3> = eps_theta.squeeze(0);
             let eps_theta: Tensor<B, 2> = eps_theta.squeeze(0); 
-            predictions.push(eps_theta); 
+            predictions.push(eps_theta.clone()); 
+
+            // println!("output {:?}", eps_theta.to_data()); 
+            // println!("targets {:?}", eps);
+
+            let loss = MSELoss::new();
+            let loss = loss.forward(eps_theta.clone(), eps_tensor.clone(), Reduction::Mean);    
+            let grads = loss.backward();  
+            println!("grads {}", eps_theta.grad(&grads).unwrap());
         }
 
         let output = Tensor::cat(predictions, 0); 
@@ -395,24 +410,22 @@ impl UNet {
         let loss = MSELoss::new();
         let loss = loss.forward(output.clone(), targets.clone(), Reduction::Mean);    
 
-        // println!("output shape {:?}", output.shape()); 
-        // println!("targets shape {:?}", targets.shape());
-
         RegressionOutput { loss, output, targets } 
     }
 }
 
 impl TrainStep<MNISTBatch<B>, RegressionOutput<B>> for UNet {
     fn step(&self, item: MNISTBatch<B>) -> TrainOutput<RegressionOutput<B>> {
-        let ddpm = DDPM::new(1000);
+        let ddpm = DDPM::new(N_STEPS);
         let item = self.forward_regression(ddpm, item); 
+        
         TrainOutput::new::<B, UNet>(self, item.loss.backward(), item)
     }
 }
 
 impl ValidStep<MNISTBatch<B>, RegressionOutput<B>> for UNet {
     fn step(&self, item: MNISTBatch<B>) -> RegressionOutput<B> {
-        let ddpm = DDPM::new(1000);
+        let ddpm = DDPM::new(N_STEPS);
         self.forward_regression(ddpm, item)
     }
 }

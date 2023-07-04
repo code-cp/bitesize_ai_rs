@@ -19,7 +19,7 @@ use crate::model::UNet;
 
 use burn_tch::{TchBackend, TchDevice}; 
 type B = burn_autodiff::ADBackendDecorator<TchBackend<f32>>;
-type D = TchDevice;
+// type D = TchDevice;
 
 fn clamp(tensor: Tensor<B, 4>, min: f32, max: f32) -> Tensor<B, 4> {
     let greater_mask = tensor.clone().greater_elem(max);
