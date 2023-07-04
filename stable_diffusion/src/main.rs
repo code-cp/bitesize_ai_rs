@@ -29,7 +29,7 @@ use burn_tch::{TchBackend, TchDevice};
 type B = burn_autodiff::ADBackendDecorator<TchBackend<f32>>;
 // type D = TchDevice;
 
-const MODEL_STATE_FILE_NAME: &str = "./tmp/checkpoint/model-1.mpk.gz";
+// const MODEL_STATE_FILE_NAME: &str = "./tmp/checkpoint/model-1.mpk.gz";
 
 fn main() {
     // let device = NdArrayDevice::Cpu; 
@@ -37,8 +37,8 @@ fn main() {
     let model_trained = train::run::<B>(device); 
 
     let n_steps = 1000; 
-    let en_chs = vec![1,64,128,256,512,1024]; 
-    let de_chs = vec![1024, 512, 256, 128, 64]; 
+    // let en_chs = vec![1,64,128,256,512,1024]; 
+    // let de_chs = vec![1024, 512, 256, 128, 64]; 
     // let model = UNet::new(n_steps, en_chs, de_chs);
     // let model_trained = model.load_state(MODEL_STATE_FILE_NAME);
 

@@ -103,12 +103,12 @@ pub struct UNetBlock {
     conv1: nn::conv::Conv2d<B>, 
     conv2: nn::conv::Conv2d<B>, 
     activation: nn::ReLU,
-    // layer_norm: nn::LayerNorm<B>, 
+    layer_norm: nn::LayerNorm<B>, 
     residual_conv: nn::conv::Conv2d<B>, 
 }
 
 impl UNetBlock {
-    pub fn new(in_ch: usize, out_ch: usize) -> Self {
+    pub fn new(in_ch: usize, out_ch: usize, layer_dim: usize) -> Self {
         let kernel_size = [3,3];  
         let conv1 = nn::conv::Conv2dConfig::new([in_ch, out_ch], kernel_size)
             .with_padding(Conv2dPaddingConfig::Valid)
@@ -117,22 +117,22 @@ impl UNetBlock {
             .with_padding(Conv2dPaddingConfig::Valid)
             .init(); 
 
-        // let d_model = 
-        // let layer_norm = nn::LayerNormConfig::new(d_model).init(); 
+        let layer_norm = nn::LayerNormConfig::new(layer_dim).init(); 
         let residual_conv = nn::conv::Conv2dConfig::new([in_ch, out_ch], [1,1]).init();
 
         Self {
             conv1, 
             conv2,
             activation: nn::ReLU::new(),  
-            // layer_norm, 
+            layer_norm, 
             residual_conv, 
         }
     }
 
     pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
-        // let x = self.layer_norm.forward(input); 
-        let x = self.conv1.forward(input.clone()); 
+        // println!("input shape {:?}", input.shape()); 
+        let x = self.layer_norm.forward(input.clone()); 
+        let x = self.conv1.forward(x); 
         let x = self.activation.forward(x); 
         let x = self.conv2.forward(x); 
         let residual = crop(input.clone(), x.clone());
@@ -178,8 +178,9 @@ pub struct Encoder {
 
 impl Encoder {
     pub fn new(channels: Vec<usize>, embedding: PositionalEmbedding<B>) -> Self {
+        let layer_shapes = vec![28, 23, 18, 13, 8];
         let blocks: Vec<UNetBlock> = (0..channels.len()-1)
-            .map(|i| UNetBlock::new(channels[i], channels[i+1]))
+            .map(|i| UNetBlock::new(channels[i], channels[i+1], layer_shapes[i]))
             .collect();
         let kernel_size = [2; 2]; 
         // to make input and output size stay at 28x28 
@@ -252,9 +253,10 @@ pub struct Decoder {
 
 impl Decoder {
     pub fn new(channels: Vec<usize>, embedding: PositionalEmbedding<B>) -> Self {
+        let layer_shapes = vec![9, 14, 19, 24];
         let blocks = (0..channels.len()-1)
             .map(
-                |i| UNetBlock::new(channels[i], channels[i+1]) 
+                |i| UNetBlock::new(channels[i], channels[i+1], layer_shapes[i]) 
             )
             .collect();
 
@@ -336,10 +338,24 @@ impl UNet {
         }
     }
 
+    // encoder part
+    // input shape Shape { dims: [1, 1, 28, 28] }
+    // input shape Shape { dims: [1, 64, 23, 23] }
+    // input shape Shape { dims: [1, 128, 18, 18] }
+    // input shape Shape { dims: [1, 256, 13, 13] }
+    // input shape Shape { dims: [1, 512, 8, 8] }
+    // decoder part
+    // input shape Shape { dims: [1, 1024, 9, 9] }
+    // input shape Shape { dims: [1, 512, 14, 14] }
+    // input shape Shape { dims: [1, 256, 19, 19] }
+    // input shape Shape { dims: [1, 128, 24, 24] }
     pub fn forward(&self, x: Tensor<B, 4>, t: usize) -> Tensor<B, 4> {
+        // println!("encoder part"); 
         let mut encoder_features = self.encoder.forward(x, t);
         encoder_features.reverse(); 
+        // println!("decoder part"); 
         let x = self.decoder.forward(encoder_features[0].clone(), encoder_features[1..].to_owned(), t); 
+        // println!("finish"); 
         x 
     }
 

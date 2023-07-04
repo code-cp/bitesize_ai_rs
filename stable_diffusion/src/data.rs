@@ -29,7 +29,7 @@ impl<B: Backend> Batcher<MNISTItem, MNISTBatch<B>> for MNISTBatcher<B> {
             .map(|data| Tensor::<B, 2>::from_data(data.convert()))
             .map(|tensor| tensor.reshape([1,28,28]))
             // normalize
-            .map(|tensor| ((tensor / 255) - 0.1307) / 0.3081)
+            .map(|tensor| ((tensor / 255) - 0.5) * 2.0)
             .collect(); 
 
         let targets = items 
