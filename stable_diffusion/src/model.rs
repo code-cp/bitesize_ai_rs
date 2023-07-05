@@ -390,7 +390,7 @@ impl UNet {
             let x_t = x_t.unsqueeze::<4>(); 
             
             // println!("forward regression: x_t size {:?}", x_t.shape()); 
-            let eps_theta: Tensor<B, 4> = self.forward(x_t, t); 
+            let eps_theta: Tensor<B, 4> = self.forward(x_t, t).require_grad(); 
             // println!("forward regression: eps_theta size {:?}", eps_theta.shape()); 
             let eps_theta: Tensor<B, 3> = eps_theta.squeeze(0);
             let eps_theta: Tensor<B, 2> = eps_theta.squeeze(0); 
@@ -402,7 +402,8 @@ impl UNet {
             let loss = MSELoss::new();
             let loss = loss.forward(eps_theta.clone(), eps_tensor.clone(), Reduction::Mean);    
             let grads = loss.backward();  
-            println!("grads {}", eps_theta.grad(&grads).unwrap());
+            // println!("loss {:?}", loss);
+            println!("grads {:?}", eps_theta.grad(&grads).unwrap());
         }
 
         let output = Tensor::cat(predictions, 0); 
