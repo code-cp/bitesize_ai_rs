@@ -4,7 +4,7 @@ use crate::ddpm::*;
 
 use burn::module::Module;
 use burn::optim::decay::WeightDecayConfig;
-use burn::optim::AdamConfig;
+use burn::optim::{AdamConfig, SgdConfig};
 use burn::record::{CompactRecorder, NoStdTrainingRecorder, Recorder};
 use burn::{
     config::Config,
@@ -30,8 +30,8 @@ pub struct MnistTrainingConfig {
     #[config(default = 1)]
     pub num_epochs: usize,
 
-    #[config(default = 512)]
-    // #[config(default = 100)]
+    // #[config(default = 512)]
+    #[config(default = 32)]
     pub batch_size: usize,
 
     #[config(default = 32)]
@@ -40,12 +40,14 @@ pub struct MnistTrainingConfig {
     #[config(default = 42)]
     pub seed: u64,
 
-    pub optimizer: AdamConfig,
+    // pub optimizer: AdamConfig,
+    pub optimizer: SgdConfig, 
 }
 
 pub fn run<B: ADBackend<InnerBackend = TchBackend<f32>>>(device: <B as Backend>::Device) -> UNet {
     // Config
-    let config_optimizer = AdamConfig::new().with_weight_decay(Some(WeightDecayConfig::new(5e-5)));
+    // let config_optimizer = AdamConfig::new().with_weight_decay(Some(WeightDecayConfig::new(5e-5)));
+    let config_optimizer = SgdConfig::new();
     let config = MnistTrainingConfig::new(config_optimizer);
     B::seed(config.seed);
 
@@ -71,13 +73,14 @@ pub fn run<B: ADBackend<InnerBackend = TchBackend<f32>>>(device: <B as Backend>:
     let en_chs = vec![1,20,40,80]; 
     let de_chs = vec![80,40,20]; 
 
+    let learning_rate = 1e-3; 
     let learner = LearnerBuilder::new(ARTIFACT_DIR)
         .metric_train_plot(LossMetric::new())
         .metric_valid_plot(LossMetric::new())
         .with_file_checkpointer(1, CompactRecorder::new())
         .devices(vec![device])
         .num_epochs(config.num_epochs)
-        .build(UNet::new(n_steps, en_chs, de_chs), config.optimizer.init::<B, UNet>(), 1e-3);
+        .build(UNet::new(n_steps, en_chs, de_chs), config.optimizer.init::<B, UNet>(), learning_rate);
 
     let model_trained = learner.fit(dataloader_train, dataloader_test);
 

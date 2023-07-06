@@ -10,6 +10,7 @@ use burn::{
         ops::ConvTransposeOptions, 
     },
     train::{RegressionOutput, TrainOutput, TrainStep, ValidStep},
+    optim::GradientsParams, 
 };
 
 use burn_ndarray::{NdArrayBackend, NdArrayDevice}; 
@@ -138,7 +139,7 @@ impl UNetBlock {
         // Layernorm in burn only normalizes along the last dimension, so need to flatten then reshape
         let flatten: Tensor::<B, 3> = input.clone().flatten(2, 3);
         let x = self.layer_norm.forward(flatten);
-        let x = x.reshape(input.shape()); 
+        let x = x.reshape(input.shape());
         let x = self.conv1.forward(x); 
         let x = self.activation.forward(x); 
         let x = self.conv2.forward(x); 
@@ -390,7 +391,7 @@ impl UNet {
             let x_t = x_t.unsqueeze::<4>(); 
             
             // println!("forward regression: x_t size {:?}", x_t.shape()); 
-            let eps_theta: Tensor<B, 4> = self.forward(x_t, t).require_grad(); 
+            let eps_theta: Tensor<B, 4> = self.forward(x_t, t); 
             // println!("forward regression: eps_theta size {:?}", eps_theta.shape()); 
             let eps_theta: Tensor<B, 3> = eps_theta.squeeze(0);
             let eps_theta: Tensor<B, 2> = eps_theta.squeeze(0); 
@@ -398,18 +399,13 @@ impl UNet {
 
             // println!("output {:?}", eps_theta.to_data()); 
             // println!("targets {:?}", eps);
-
-            let loss = MSELoss::new();
-            let loss = loss.forward(eps_theta.clone(), eps_tensor.clone(), Reduction::Mean);    
-            let grads = loss.backward();  
-            // println!("loss {:?}", loss);
-            println!("grads {:?}", eps_theta.grad(&grads).unwrap());
         }
 
         let output = Tensor::cat(predictions, 0); 
         let targets = Tensor::cat(labels, 0); 
         let loss = MSELoss::new();
-        let loss = loss.forward(output.clone(), targets.clone(), Reduction::Mean);    
+        // let loss = loss.forward(output.clone(), targets.clone(), Reduction::Mean);   
+        let loss = loss.forward(output.clone(), targets.clone(), Reduction::Sum);   
 
         RegressionOutput { loss, output, targets } 
     }
