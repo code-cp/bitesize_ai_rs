@@ -4,6 +4,10 @@
 - tested on Mac M1 chip 
 - cargo run --release --features tch-gpu
 
+## todo 
+
+- [ ] try https://github.com/tcapelle/Diffusion-Models-pytorch/blob/e9bab9a1ae1f1745493031f4163427fe884e12fb/modules.py#L161
+
 ## references 
 
 - 2023 - 李宏毅 - Diffusion Model 原理剖析
