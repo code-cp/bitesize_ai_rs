@@ -17,7 +17,7 @@ use burn_ndarray::{NdArrayBackend, NdArrayDevice};
 use burn_train::metric::{Adaptor, LossInput};
 use burn_tensor::{loss::cross_entropy_with_logits, Data, Shape, Distribution};
 
-use ndarray::{Array, Array1, Array2, Array3, s, Axis};
+use ndarray::{Array, Array1, Array2, Array3, s, Axis, Zip};
 use ndarray_rand::RandomExt;
 use ndarray_rand::rand_distr::Uniform;
 
@@ -76,30 +76,54 @@ pub fn crop(source: Tensor<B, 4>, target: Tensor<B, 4>) -> Tensor<B, 4> {
     source.index([0..batch_size, 0..channel, start_h..start_h + new_height, start_w..start_w + new_width]).clone()
 }
 
-#[derive(Module, Debug)]
-pub struct PositionalEmbedding<B: Backend> {
-    embedding: nn::Embedding<B>,
-    max_seq_length: usize, 
+#[derive(Module, Debug, Clone)]
+pub struct PositionalEmbedding {
+    d_model: usize, 
+    embedding: Tensor<B, 2>,
 }
 
-impl<B: Backend> PositionalEmbedding<B> {
-    // This is a learned positional encoding, like Roberta. it's the simplest form where a bias is learned based on an index.
-    // Sin is useful when the model needs to generalize to sequence lengths not seen during training. For autoregressive models, it seems better now to not put any positional encoding, it's mostly useful for bidirectional transformers without an autoregressive mask.
+fn meshgrid<T>(x: &[T], y: &[T]) -> (Array2<T>, Array2<T>)
+where
+    T: Copy,
+{
+    let m = x.len();
+    let n = y.len();
+
+    let xx = Array::from_shape_fn((m, n), |(i, _)| x[i]);
+    let yy = Array::from_shape_fn((m, n), |(_, j)| y[j]);
+
+    (xx, yy)
+}
+
+impl PositionalEmbedding {
     pub fn new(max_seq_length: usize, d_model: usize) -> Self {
-        let embedding = EmbeddingConfig::new(max_seq_length, d_model).init(); 
+        let mut pe = Array::zeros((max_seq_length, d_model)); 
+
+        for pos in 0..max_seq_length {
+            for two_i in (0..d_model-2).step_by(d_model/2) {
+                let pe_2i = (pos as f32 / 10000.0_f32.powf((two_i as f32) / (d_model as f32))).sin();
+                let pe_2i_1 = (pos as f32 / 10000.0_f32.powf((two_i as f32) / (d_model as f32))).cos();
+    
+                pe[[pos, two_i]] = pe_2i;
+                pe[[pos, two_i + 1]] = pe_2i_1;
+            }
+        } 
+
+        let pe_vec: Vec<f32> = pe.iter().map(|x| *x).collect();
+        let pe_data = Data::from(pe_vec.as_slice()); 
+        let pe_tensor = Tensor::from_data(pe_data); 
+        let pe_tensor = pe_tensor.reshape(Shape::new([max_seq_length, d_model]));
+
         Self {
-            embedding,
-            max_seq_length, 
+            embedding: pe_tensor,
+            d_model, 
         }
     }
 
     pub fn forward(&self, t: usize) -> Tensor<B, 3> {
-        // ref https://github.com/burn-rs/burn/blob/f99fe0faddfa9152f0049532b94ce33177dd55f9/examples/text-generation/src/model.rs
-        let index_positions = Tensor::ones(Shape::new([1, 1])).mul_scalar(t as f32);
-        // println!("embed weight shape {:?}", self.embedding.clone().into_record().weight.shape()); 
-        let embed = self.embedding.forward(index_positions); 
-        // println!("embed weight shape {:?}", embed.shape()); 
-        embed 
+        let embedding = self.embedding.clone().index([t..t+1, 0..self.d_model]);
+        let embedding = embedding.unsqueeze(); 
+        embedding 
     }
 }
 
@@ -180,12 +204,12 @@ impl<B: Backend> PEEncoderBlock<B> {
 pub struct Encoder {
     blocks: Vec<UNetBlock>,
     downsampling: Vec<nn::pool::MaxPool2d>, 
-    embedding: PositionalEmbedding<B>, 
+    embedding: PositionalEmbedding, 
     pe_blocks: Vec<PEEncoderBlock<B>>, 
 }
 
 impl Encoder {
-    pub fn new(channels: Vec<usize>, embedding: PositionalEmbedding<B>) -> Self {
+    pub fn new(channels: Vec<usize>, embedding: PositionalEmbedding) -> Self {
         let layer_shapes = vec![28*28, 23*23, 18*18];
         let blocks: Vec<UNetBlock> = (0..channels.len()-1)
             .map(|i| UNetBlock::new(channels[i], channels[i+1], layer_shapes[i]))
@@ -254,13 +278,13 @@ pub struct Decoder {
     channels: Vec<usize>, 
     blocks: Vec<UNetBlock>,
     upconvs: Vec<nn::conv::Conv2d<B>>, 
-    embedding: PositionalEmbedding<B>, 
+    embedding: PositionalEmbedding, 
     pe_blocks: Vec<PEDecoderBlcok<B>>, 
     conv_out: nn::conv::Conv2d<B>, 
 }
 
 impl Decoder {
-    pub fn new(channels: Vec<usize>, embedding: PositionalEmbedding<B>) -> Self {
+    pub fn new(channels: Vec<usize>, embedding: PositionalEmbedding) -> Self {
         let layer_shapes = vec![19*19, 24*24, 29*29];
         let blocks = (0..channels.len()-1)
             .map(
