@@ -82,19 +82,6 @@ pub struct PositionalEmbedding {
     embedding: Tensor<B, 2>,
 }
 
-fn meshgrid<T>(x: &[T], y: &[T]) -> (Array2<T>, Array2<T>)
-where
-    T: Copy,
-{
-    let m = x.len();
-    let n = y.len();
-
-    let xx = Array::from_shape_fn((m, n), |(i, _)| x[i]);
-    let yy = Array::from_shape_fn((m, n), |(_, j)| y[j]);
-
-    (xx, yy)
-}
-
 impl PositionalEmbedding {
     pub fn new(max_seq_length: usize, d_model: usize) -> Self {
         let mut pe = Array::zeros((max_seq_length, d_model)); 

@@ -6,7 +6,8 @@
 
 ## todo 
 
-- [ ] try https://github.com/tcapelle/Diffusion-Models-pytorch/blob/e9bab9a1ae1f1745493031f4163427fe884e12fb/modules.py#L161
+- [x] try https://github.com/tcapelle/Diffusion-Models-pytorch/blob/e9bab9a1ae1f1745493031f4163427fe884e12fb/modules.py#L161
+- [ ] debug why train loss does not decrease 
 
 ## references 
 
@@ -16,3 +17,4 @@
 - https://jalammar.github.io/illustrated-stable-diffusion/
 - https://amaarora.github.io/posts/2020-09-13-unet.html
 - https://hackmd.io/@gianghoangcotai/HJSaDvKuI#Residual-block
+- https://github.com/LaurentMazare/diffusers-rs/tree/main
