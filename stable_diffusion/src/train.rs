@@ -30,8 +30,8 @@ pub struct MnistTrainingConfig {
     #[config(default = 1)]
     pub num_epochs: usize,
 
-    // #[config(default = 512)]
-    #[config(default = 32)]
+    #[config(default = 512)]
+    // #[config(default = 32)]
     pub batch_size: usize,
 
     #[config(default = 32)]

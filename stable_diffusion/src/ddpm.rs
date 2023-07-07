@@ -110,7 +110,7 @@ impl DDPM {
         }
 
         let coef = 1.0 - self.alphas[t]; 
-        let coef = coef / (1.0 - self.alpha_bars[t]).sqrt(); 
+        let coef: f32 = coef / (1.0 - self.alpha_bars[t]).sqrt(); 
         let x_0 = x_t.clone().sub(eps.mul_scalar(coef)); 
         let x_0 = x_0.div_scalar(self.alphas[t].sqrt()); 
         let x_0 = clamp(x_0, -1.0, 1.0); 

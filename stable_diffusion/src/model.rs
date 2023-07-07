@@ -273,7 +273,7 @@ pub struct Decoder {
 impl Decoder {
     pub fn new(channels: Vec<usize>, embedding: PositionalEmbedding) -> Self {
         let layer_shapes = vec![19*19, 24*24, 29*29];
-        let blocks = (0..channels.len()-1)
+        let blocks: Vec<UNetBlock> = (0..channels.len()-1)
             .map(
                 |i| UNetBlock::new(channels[i], channels[i+1], layer_shapes[i]) 
             )
